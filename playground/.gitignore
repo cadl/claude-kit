@@ -1,0 +1,40 @@
+# Playground .gitignore
+# This file prevents test data and outputs from being committed to git
+
+# Test data files (PDFs, EPUBs, etc.)
+*/sample-data/*.pdf
+*/sample-data/*.epub
+*/sample-data/*.mobi
+*/sample-data/*.txt
+# But keep the directory structure
+!*/sample-data/.gitkeep
+
+# Test outputs
+*/test-output/
+
+# Temporary files
+*/.DS_Store
+*/Thumbs.db
+
+# Claude Code session files (if any)
+*/.claude/sessions/
+*/.claude/cache/
+
+# Local configuration overrides
+*/.claude/settings.local.json
+
+# Log files
+*.log
+
+# Backup files
+*~
+*.bak
+*.swp
+*.swo
+
+# OS-specific files
+.DS_Store
+.Spotlight-V100
+.Trashes
+Thumbs.db
+Desktop.ini
