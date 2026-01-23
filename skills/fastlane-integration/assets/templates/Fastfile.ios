@@ -1,0 +1,90 @@
+# Fastlane Configuration for iOS/macOS Native Apps
+# For more information: https://docs.fastlane.tools
+
+# Uncomment and set your default platform
+# default_platform(:ios)
+# default_platform(:mac)
+
+# iOS Platform
+platform :ios do
+  desc "Generate screenshots using snapshot"
+  lane :screenshots do
+    snapshot
+  end
+
+  desc "Frame screenshots with device frames and captions"
+  lane :frame do
+    frameit(
+      path: "./screenshots",
+      white: false  # Set to true for white device frames
+    )
+  end
+
+  desc "Upload metadata and screenshots to App Store Connect"
+  lane :upload do
+    deliver(
+      skip_binary_upload: true,  # Don't upload the app binary
+      skip_metadata: false,       # Upload metadata
+      skip_screenshots: false,    # Upload screenshots
+      force: true                 # Skip verification prompts
+    )
+  end
+
+  desc "Full release workflow: screenshots → frame → upload"
+  lane :release do
+    screenshots
+    frame
+    upload
+  end
+
+  # Example: Beta distribution lane
+  desc "Upload a new beta build to TestFlight"
+  lane :beta do
+    increment_build_number
+    build_app(scheme: "YourApp")
+    upload_to_testflight
+  end
+end
+
+# macOS Platform
+platform :mac do
+  desc "Generate screenshots using snapshot"
+  lane :screenshots do
+    snapshot(
+      devices: [],
+      languages: ["en-US", "zh-Hans"],
+      scheme: "YourMacAppUITests",
+      destination: "platform=macOS"
+    )
+  end
+
+  desc "Frame screenshots with backgrounds and captions"
+  lane :frame do
+    frameit(path: "./screenshots")
+  end
+
+  desc "Upload metadata and screenshots to Mac App Store"
+  lane :upload do
+    deliver(
+      skip_binary_upload: true,
+      force: true,
+      platform: "osx"
+    )
+  end
+
+  desc "Full release workflow"
+  lane :release do
+    screenshots
+    frame
+    upload
+  end
+
+  # Example: Build and package for Mac App Store
+  desc "Build and package for Mac App Store"
+  lane :build do
+    build_mac_app(
+      scheme: "YourMacApp",
+      export_method: "app-store"
+    )
+  end
+end

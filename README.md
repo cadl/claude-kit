@@ -140,16 +140,100 @@ claude code
 
 ---
 
+### 🚀 fastlane-integration
+
+**用途**：为 iOS/macOS/Electron 项目集成 fastlane，自动化 App Store 发布、截图生成和元数据管理。
+
+**主要功能**：
+
+1. **工作流决策树**
+   - 原生 iOS/macOS 应用 → fastlane snapshot
+   - macOS Electron 应用 → Playwright + 原生窗口捕获
+   - Android 应用 → screengrab + supply
+
+2. **截图生成**
+   - 原生应用使用 fastlane snapshot + XCUITest
+   - Electron 应用使用 Playwright + 自定义脚本
+   - macOS 原生窗口捕获（包含标题栏和红绿灯按钮）
+   - 交互模式和自动模式支持
+
+3. **截图美化 (frameit)**
+   - 添加背景图片和标题文字
+   - 自定义投影效果
+   - 多语言标题支持
+   - 16:10 比例缩放
+
+4. **元数据管理**
+   - 多语言元数据目录结构
+   - 应用名称、描述、关键词、更新日志
+   - 审核信息配置
+
+5. **App Store Connect 上传**
+   - API Key 认证
+   - 元数据和截图上传
+   - 支持跳过特定内容
+
+**适用场景**：
+- 需要为 iOS/macOS 应用自动化 App Store 发布流程
+- Electron 桌面应用需要生成 Mac App Store 截图
+- 需要管理多语言 App Store 元数据
+- 想要美化应用商店截图（添加背景、标题、投影）
+
+**文件位置**：
+- Skill 源码：`skills/fastlane-integration/`
+- 主要指南：`skills/fastlane-integration/SKILL.md`
+- 参考文档：`skills/fastlane-integration/references/`
+- 脚本工具：`skills/fastlane-integration/scripts/`
+- 模板文件：`skills/fastlane-integration/assets/templates/`
+
+**如何使用**：
+
+```bash
+# 安装到 Claude
+unzip fastlane-integration.zip -d ~/.claude/skills/
+claude code
+
+# 在 Claude Code 中
+> I need to set up fastlane for my Electron macOS app
+> Help me generate screenshots for the Mac App Store
+> Set up multi-language metadata for my iOS app
+```
+
+**依赖**：
+- Ruby (fastlane): `gem install fastlane`
+- ImageMagick (frameit): `brew install imagemagick`
+- Playwright (Electron): `npm install -D playwright`
+
+---
+
 ## 项目结构
 
 ```
 claude-kit/
 ├── skills/                          # Skills 源代码（生产环境）
-│   └── book-reading-assistant/
-│       ├── SKILL.md                # 必需：包含 YAML frontmatter 的 skill 指令
-│       └── references/             # 可选：按需加载的参考文档
-│           ├── output-formats.md   # 文件格式规范
-│           └── spaced-repetition-guide.md  # 复习算法
+│   ├── book-reading-assistant/
+│   │   ├── SKILL.md                # 必需：包含 YAML frontmatter 的 skill 指令
+│   │   └── references/             # 可选：按需加载的参考文档
+│   │       ├── output-formats.md   # 文件格式规范
+│   │       └── spaced-repetition-guide.md  # 复习算法
+│   └── fastlane-integration/
+│       ├── SKILL.md                # 主要指南
+│       ├── references/             # 详细参考文档
+│       │   ├── ios-snapshot.md
+│       │   ├── macos-electron.md
+│       │   ├── frameit-config.md
+│       │   └── metadata-structure.md
+│       ├── scripts/                # 自动化脚本
+│       │   ├── init_fastlane.sh
+│       │   ├── screenshot_electron.js
+│       │   ├── screenshot_macos.js
+│       │   └── macos-window-id.swift
+│       └── assets/templates/       # 模板文件
+│           ├── Appfile
+│           ├── Fastfile.ios
+│           ├── Fastfile.electron
+│           ├── Snapfile
+│           └── Framefile.json
 │
 ├── playground/                      # Skills 的隔离测试环境
 │   ├── README.md                   # Playground 总说明

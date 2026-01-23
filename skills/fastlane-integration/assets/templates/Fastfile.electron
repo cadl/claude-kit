@@ -1,0 +1,358 @@
+# Fastlane Configuration for Electron macOS Apps
+# Based on the piconv project implementation
+# For more information: https://docs.fastlane.tools
+
+default_platform(:mac)
+
+platform :mac do
+  # Helper functions for build number management
+  def current_build_number
+    path = File.expand_path("build_number.txt", __dir__)
+    begin
+      Integer(File.read(path).strip)
+    rescue StandardError
+      0
+    end
+  end
+
+  def write_build_number!(build_number)
+    path = File.expand_path("build_number.txt", __dir__)
+    File.write(path, "#{Integer(build_number)}\n")
+  end
+
+  desc "Generate screenshots using Playwright"
+  lane :screenshots do
+    # Default to native window capture so screenshots include the macOS titlebar and traffic lights.
+    capture_mode = ENV.fetch("PICONV_SCREENSHOT_CAPTURE_MODE", "window")
+    mode = ENV.fetch("PICONV_SCREENSHOT_MODE", "interactive")
+
+    # Use `system(env, ...)` so interactive mode can read from the user's terminal.
+    env = {
+      "PICONV_SCREENSHOT_CAPTURE_MODE" => capture_mode,
+      "PICONV_SCREENSHOT_MODE" => mode
+    }
+    env["PICONV_SCREENSHOT_WINDOW_SIZE"] = ENV["PICONV_SCREENSHOT_WINDOW_SIZE"] if ENV["PICONV_SCREENSHOT_WINDOW_SIZE"].to_s.length > 0
+    env["PICONV_SCREENSHOT_DEVICE_SCALE_FACTOR"] = ENV["PICONV_SCREENSHOT_DEVICE_SCALE_FACTOR"] if ENV["PICONV_SCREENSHOT_DEVICE_SCALE_FACTOR"].to_s.length > 0
+    env["PICONV_SCREENSHOT_OUTPUT_SIZE"] = ENV["PICONV_SCREENSHOT_OUTPUT_SIZE"] if ENV["PICONV_SCREENSHOT_OUTPUT_SIZE"].to_s.length > 0
+    env["PICONV_SCREENSHOT_INTERACTIVE_AUTOSWITCH"] = ENV["PICONV_SCREENSHOT_INTERACTIVE_AUTOSWITCH"] if ENV["PICONV_SCREENSHOT_INTERACTIVE_AUTOSWITCH"].to_s.length > 0
+
+    UI.message("Running screenshot script with mode=#{mode} capture_mode=#{capture_mode}")
+    if mode == "interactive"
+      # Replace fastlane process so Node owns the TTY (prevents stdin being closed by fastlane).
+      exec(env, "node", "../scripts/screenshot.js")
+    else
+      ok = system(env, "node", "../scripts/screenshot.js")
+      UI.user_error!("Screenshot script failed") unless ok
+    end
+  end
+
+  desc "Frame screenshots with backgrounds and captions"
+  lane :frame do
+    require "frameit"
+    require "fileutils"
+
+    # We want to capture screenshots at the app's default window size (so the UI matches),
+    # then render onto a 16:10 background at an App Store supported output size.
+    #
+    # Frameit doesn't support this directly for macOS without relying on offsets.json,
+    # so we provide a custom "no device frame" editor that:
+    # - Keeps the background at a target output size (default 2880x1800)
+    # - Scales the raw screenshot to fit inside the background + padding + text
+    class PiconvNoFrameMacEditor < Frameit::Editor
+      def shadow_enabled?
+        ENV.fetch("PICONV_FRAME_SHADOW", "1") != "0"
+      end
+
+      def shadow_opacity
+        Integer(ENV.fetch("PICONV_FRAME_SHADOW_OPACITY", "35"))
+      end
+
+      def shadow_sigma
+        Integer(ENV.fetch("PICONV_FRAME_SHADOW_SIGMA", "18"))
+      end
+
+      def shadow_offset_x
+        Integer(ENV.fetch("PICONV_FRAME_SHADOW_OFFSET_X", "0"))
+      end
+
+      def shadow_offset_y
+        Integer(ENV.fetch("PICONV_FRAME_SHADOW_OFFSET_Y", "24"))
+      end
+
+      def shadow_padding_x
+        shadow_sigma * 4 + shadow_offset_x.abs
+      end
+
+      def shadow_padding_y
+        shadow_sigma * 4 + shadow_offset_y.abs
+      end
+
+      def add_drop_shadow(img)
+        require "tempfile"
+
+        out = Tempfile.new(["piconv-shadow", ".png"])
+        out.close
+
+        MiniMagick::Tool::Convert.new do |c|
+          c << img.path
+          c << "("
+          c << "+clone"
+          c << "-background" << "black"
+          c << "-shadow" << "#{shadow_opacity}x#{shadow_sigma}+#{shadow_offset_x}+#{shadow_offset_y}"
+          c << ")"
+          c << "+swap"
+          c << "-background" << "none"
+          c << "-layers" << "merge"
+          c << "+repage"
+          c << out.path
+        end
+
+        MiniMagick::Image.open(out.path)
+      end
+
+      def frame!
+        prepare_image
+        return unless is_complex_framing_mode?
+        @image = complex_framing
+        store_result
+      end
+
+      def generate_background
+        background = MiniMagick::Image.open(@config["background"])
+        target = ENV["PICONV_FRAME_OUTPUT_SIZE"].to_s
+        return background if target.empty?
+        return background unless target.match?(/^\d+x\d+$/)
+
+        width, height = target.split("x").map(&:to_i)
+        return background if width <= 0 || height <= 0
+
+        if background.width != width || background.height != height
+          background.resize("#{width}x#{height}^")
+          background.merge!(["-gravity", "center", "-crop", "#{width}x#{height}+0+0"])
+        end
+        background
+      end
+
+      def complex_framing
+        background = generate_background
+
+        self.space_to_device = vertical_frame_padding
+        background = put_title_into_background(background, @config["stack_title"]) if @config["title"]
+
+        frame_width = background.width - horizontal_frame_padding * 2
+        frame_height = background.height - effective_text_height - vertical_frame_padding
+        available_width = frame_width
+        available_height = frame_height
+        if shadow_enabled?
+          available_width = [1, available_width - shadow_padding_x].max
+          available_height = [1, available_height - shadow_padding_y].max
+        end
+
+        if @config["show_complete_frame"]
+          image_aspect_ratio = @image.width.to_f / @image.height.to_f
+          image_width = [available_width, @image.width].min
+          image_height = [available_height, image_width / image_aspect_ratio].min
+          image_width = image_height * image_aspect_ratio
+          @image.resize("#{image_width}x#{image_height}") if image_width < @image.width || image_height < @image.height
+        else
+          @image.resize("#{available_width}x") if available_width < @image.width
+        end
+
+        @image = add_drop_shadow(@image) if shadow_enabled?
+        @image = put_device_into_background(background)
+        image
+      end
+    end
+
+    Frameit::Screenshot.class_eval do
+      def mac?
+        device_name.to_s.include?("MacBook")
+      end
+    end
+
+    Frameit::Runner.class_eval do
+      unless method_defined?(:_piconv_original_editor)
+        alias_method :_piconv_original_editor, :editor
+      end
+
+      def editor(screenshot, config)
+        return PiconvNoFrameMacEditor.new(screenshot, config, Frameit.config[:debug_mode]) if screenshot.mac?
+        _piconv_original_editor(screenshot, config)
+      end
+    end
+
+    # Default output size for framed screenshots (App Store supported 16:10).
+    ENV["PICONV_FRAME_OUTPUT_SIZE"] = ENV.fetch("PICONV_FRAME_OUTPUT_SIZE", "2880x1800")
+
+    project_root = File.expand_path("..", __dir__)
+    languages = %w[en-US zh-Hans]
+    framed_root = File.join(project_root, "fastlane", "screenshots_framed")
+    expected_basenames = %w[1_main 2_conversion 3_history]
+    keep_staging = ENV.fetch("PICONV_FRAME_KEEP_STAGING", "0") == "1"
+
+    target = ENV["PICONV_FRAME_OUTPUT_SIZE"].to_s
+    UI.user_error!("PICONV_FRAME_OUTPUT_SIZE must be like 2880x1800") unless target.match?(/^\d+x\d+$/)
+    target_w, target_h = target.split("x").map(&:to_i)
+    UI.user_error!("PICONV_FRAME_OUTPUT_SIZE must be positive") unless target_w > 0 && target_h > 0
+
+    languages.each do |lang|
+      screenshots_dir = File.join(project_root, "fastlane", "screenshots", lang)
+      staging_root = File.join(project_root, "fastlane", "screenshots", ".frameit-staging", lang)
+      framed_dir = File.join(framed_root, lang)
+      FileUtils.rm_rf(staging_root)
+      FileUtils.mkdir_p(staging_root)
+      FileUtils.mkdir_p(framed_dir)
+
+      # Frameit expects a Framefile.json inside `path:`. We generate a staging Framefile.json
+      # that keeps using our repo assets (backgrounds/fonts) via adjusted relative paths.
+      framefile_src = File.join(project_root, "fastlane", "screenshots", "Framefile.json")
+      framefile_dst = File.join(staging_root, "Framefile.json")
+      framefile = File.read(framefile_src)
+      framefile = framefile.gsub("../backgrounds/", "../../../backgrounds/").gsub("../fonts/", "../../../fonts/")
+      File.write(framefile_dst, framefile)
+
+      # Work on a staging copy so we never overwrite the raw screenshots.
+      expected_basenames.each do |base|
+        raw_path = File.join(screenshots_dir, "#{base}.png")
+        next unless File.exist?(raw_path)
+        FileUtils.cp(raw_path, File.join(staging_root, "#{base}.png"))
+      end
+
+      %w[title.strings keyword.strings].each do |strings_file|
+        src = File.join(screenshots_dir, strings_file)
+        next unless File.exist?(src)
+        FileUtils.ln_sf(src, File.join(staging_root, strings_file))
+      end
+
+      frameit(
+        path: staging_root,
+        force_device_type: "mac"
+      )
+
+      expected_basenames.each do |base|
+        framed_candidate = File.join(staging_root, "#{base}_framed.png")
+        fallback_candidate = File.join(staging_root, "#{base}.png")
+        picked =
+          if File.exist?(framed_candidate)
+            framed_candidate
+          elsif File.exist?(fallback_candidate)
+            fallback_candidate
+          else
+            UI.important("No output produced for #{lang}/#{base}")
+            next
+          end
+
+        size = MiniMagick::Image.open(picked)
+        unless size.width == target_w && size.height == target_h
+          UI.user_error!(
+            "Frameit output for #{lang}/#{base} has unexpected size #{size.width}x#{size.height} (expected #{target_w}x#{target_h}). " \
+              "Make sure Framefile.json + background are configured and frameit actually processed the screenshot."
+          )
+        end
+
+        FileUtils.cp(picked, File.join(framed_dir, "#{base}_framed.png"))
+      end
+
+      final_size = ENV["PICONV_FRAME_FINAL_SIZE"].to_s
+      unless final_size.empty?
+        UI.user_error!("PICONV_FRAME_FINAL_SIZE must be like 2880x1800") unless final_size.match?(/^\d+x\d+$/)
+        final_w, final_h = final_size.split("x").map(&:to_i)
+        UI.user_error!("PICONV_FRAME_FINAL_SIZE must be positive") unless final_w > 0 && final_h > 0
+
+        Dir[File.join(framed_dir, "*_framed.png")].each do |output_path|
+          sh "sips -z #{final_h} #{final_w} '#{output_path}' --out '#{output_path}'"
+        end
+      end
+
+      FileUtils.rm_rf(staging_root) unless keep_staging
+    end
+  end
+
+  desc "Update metadata only (no screenshots)"
+  lane :upload_metadata do
+    deliver(
+      app_identifier: "com.yourcompany.yourapp",  # CHANGE THIS
+      skip_binary_upload: true,
+      skip_screenshots: true,
+      precheck_include_in_app_purchases: false,
+      force: true,
+      platform: "osx"
+    )
+  end
+
+  desc "Update screenshots only (no metadata)"
+  lane :upload_screenshots do
+    deliver(
+      app_identifier: "com.yourcompany.yourapp",  # CHANGE THIS
+      skip_binary_upload: true,
+      skip_metadata: true,
+      screenshots_path: "./fastlane/screenshots_framed",
+      precheck_include_in_app_purchases: false,
+      force: true,
+      platform: "osx"
+    )
+  end
+
+  desc "Full release workflow: screenshots → frame → upload"
+  lane :release do
+    screenshots
+    frame
+    upload
+  end
+
+  desc "Upload metadata and screenshots to App Store Connect"
+  lane :upload do
+    api_key = app_store_connect_api_key(
+      key_id: ENV.fetch("APP_STORE_CONNECT_KEY_ID"),
+      issuer_id: ENV.fetch("APP_STORE_CONNECT_ISSUER_ID"),
+      key_filepath: ENV.fetch("APP_STORE_CONNECT_KEY_PATH")
+    )
+
+    deliver(
+      api_key: api_key,
+      app_identifier: "com.yourcompany.yourapp",  # CHANGE THIS
+      skip_binary_upload: true,
+      skip_metadata: false,
+      skip_screenshots: false,
+      screenshots_path: "./fastlane/screenshots_framed",
+      precheck_include_in_app_purchases: false,
+      force: true,
+      platform: "osx"
+    )
+  end
+
+  desc "Build Electron app for Mac App Store"
+  lane :build do
+    project_root = File.expand_path("..", __dir__)
+
+    # Optional: Generate icon.icns if it's out of date
+    icon_png = File.expand_path("../resources/icon.png", __dir__)
+    icon_icns = File.expand_path("../build/icon.icns", __dir__)
+    if File.exist?(icon_png) && (!File.exist?(icon_icns) || File.mtime(icon_icns) < File.mtime(icon_png))
+      UI.message("Generating macOS icon.icns from resources/icon.png...")
+      sh "bash ../scripts/generate-icon.sh"
+    end
+
+    # Increment build number
+    build_number = current_build_number + 1
+    require "json"
+    package_json = JSON.parse(File.read(File.join(project_root, "package.json")))
+    marketing_version = package_json["version"].to_s
+    UI.user_error!("package.json version is missing") if marketing_version.empty?
+    UI.user_error!("package.json version must look like 1.0.0") unless marketing_version.match?(/^\d+\.\d+\.\d+$/)
+
+    UI.message("Using CFBundleShortVersionString: #{marketing_version}")
+    # CFBundleVersion must be 1-3 dot-separated integers (e.g. 2 or 1.2 or 1.2.3) and must increase over time.
+    # Apple accepts at most 3 integers; we use the stable 1.0.N format here (min is 1.0.0).
+    bundle_prefix = ENV.fetch("PICONV_BUNDLE_VERSION_PREFIX", "1.0").to_s
+    UI.user_error!("PICONV_BUNDLE_VERSION_PREFIX must look like 1.0") unless bundle_prefix.match?(/^\d+\.\d+$/)
+    bundle_version = "#{bundle_prefix}.#{build_number}"
+    UI.message("Using CFBundleVersion: #{bundle_version}")
+
+    Dir.chdir(project_root) do
+      sh "npm run build"
+      sh "npx electron-builder --mac --config.buildVersion=#{bundle_version}"
+    end
+    write_build_number!(build_number)
+  end
+end

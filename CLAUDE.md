@@ -230,6 +230,30 @@ Playground uses symlinks (not copies) for skills:
 - See `playground/book-reading-assistant/test-scenarios.md` for 10 detailed test scenarios
 - Requires test PDF/EPUB in `playground/book-reading-assistant/sample-data/`
 
+### fastlane-integration
+
+**Purpose:** Guide for integrating fastlane into iOS/macOS/Electron projects for automated App Store releases, screenshot generation, and metadata management.
+
+**Key Features:**
+- Workflow decision tree for different project types (Native iOS/macOS, Electron macOS, Android)
+- Screenshot generation with fastlane snapshot (native) or Playwright (Electron)
+- Native macOS window capture with titlebar and traffic lights
+- Screenshot beautification with frameit (backgrounds, captions, drop shadows)
+- Multi-language metadata management
+- App Store Connect upload automation
+
+**Files:**
+- `skills/fastlane-integration/SKILL.md` (main guide)
+- `skills/fastlane-integration/references/ios-snapshot.md` (iOS/macOS snapshot setup)
+- `skills/fastlane-integration/references/macos-electron.md` (Electron macOS guide)
+- `skills/fastlane-integration/references/frameit-config.md` (frameit configuration)
+- `skills/fastlane-integration/references/metadata-structure.md` (metadata fields)
+- `skills/fastlane-integration/scripts/` (init_fastlane.sh, screenshot scripts)
+- `skills/fastlane-integration/assets/templates/` (Fastfile, Appfile, etc.)
+
+**Testing:**
+- No playground yet (can be created if needed)
+
 ## Troubleshooting
 
 ### Skill Not Loading in Playground

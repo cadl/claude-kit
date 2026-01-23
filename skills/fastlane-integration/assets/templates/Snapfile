@@ -1,0 +1,50 @@
+# Snapfile - Snapshot Configuration
+# For more information: https://docs.fastlane.tools/actions/snapshot/
+
+# A list of devices you want to take screenshots from
+devices([
+  "iPhone 15 Pro Max",
+  "iPhone 15 Pro",
+  "iPhone SE (3rd generation)",
+  "iPad Pro (12.9-inch) (6th generation)"
+])
+
+# A list of supported languages
+languages([
+  "en-US",
+  "zh-Hans"
+])
+
+# The name of the scheme which contains the UI Tests
+scheme("YourAppUITests")
+
+# Where should the resulting screenshots be stored?
+output_directory("./screenshots")
+
+# Clear all previously generated screenshots before creating new ones
+clear_previous_screenshots(true)
+
+# Remove the '#' to clear all previously generated screenshots
+# before creating new ones
+# clear_previous_screenshots(true)
+
+# Remove the '#' to set the status bar to 9:41 AM, and show full battery and reception
+# override_status_bar(true)
+
+# Arguments to pass to the app on launch
+# launch_arguments(["-favColor red"])
+
+# For more information about all available options run
+# fastlane action snapshot
+
+# Stop the script if a test fails
+# stop_after_first_error(true)
+
+# Reinstall the app before running the tests
+# reinstall_app(true)
+
+# Erase the simulator (or device) before running the tests
+# erase_simulator(true)
+
+# Configure slather code coverage
+# use_slather(true)

@@ -1,0 +1,47 @@
+{
+  "device_frame_version": "latest",
+  "default": {
+    "background": "./backgrounds/gradient.png",
+    "keyword": {
+      "font": "./fonts/Helvetica-Bold.ttf",
+      "fontSize": 36,
+      "color": "#FFFFFF"
+    },
+    "title": {
+      "font": "./fonts/Helvetica.ttf",
+      "fontSize": 52,
+      "color": "#FFFFFF"
+    },
+    "padding": 50,
+    "title_below_image": false
+  },
+  "data": [
+    {
+      "filter": "1_*",
+      "keyword": {
+        "text": "WELCOME"
+      },
+      "title": {
+        "text": "Welcome to the App"
+      }
+    },
+    {
+      "filter": "2_*",
+      "keyword": {
+        "text": "FEATURES"
+      },
+      "title": {
+        "text": "Powerful Features"
+      }
+    },
+    {
+      "filter": "3_*",
+      "keyword": {
+        "text": "EASY"
+      },
+      "title": {
+        "text": "Simple and Intuitive"
+      }
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+# Fastlane Appfile
+# For more information: https://docs.fastlane.tools/advanced/Appfile/
+
+# Your Apple ID email
+apple_id("your@email.com")
+
+# App Bundle Identifier
+app_identifier("com.yourcompany.yourapp")
+
+# Team ID (found in Apple Developer Portal)
+# team_id("XXXXXXXXXX")
+
+# iTunes Connect Team ID (if you have multiple teams)
+# itunes_connect_id("XXXXXXXXXX")
+
+# For multiple apps or platforms, you can use for_platform:
+# for_platform :ios do
+#   app_identifier("com.yourcompany.yourapp.ios")
+# end
+#
+# for_platform :mac do
+#   app_identifier("com.yourcompany.yourapp.mac")
+# end
