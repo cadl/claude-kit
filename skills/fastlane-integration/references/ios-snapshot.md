@@ -6,6 +6,8 @@ Complete guide for automated screenshot generation using fastlane snapshot for n
 
 Fastlane snapshot uses XCUITest to drive your app and automatically capture screenshots across multiple devices and languages.
 
+**For complete iOS setup**, see `ios-native.md` for full workflow including API Key configuration, metadata management, and upload procedures.
+
 ## Setup
 
 ### 1. Create UI Test Target
@@ -31,11 +33,13 @@ Edit `fastlane/Snapfile`:
 ```ruby
 # Supported devices
 devices([
-  "iPhone 15 Pro Max",
-  "iPhone 15 Pro",
-  "iPhone SE (3rd generation)",
-  "iPad Pro (12.9-inch) (6th generation)"
+  "iPhone 17 Pro Max",      # 6.9" display (App Store required)
+  "iPhone 17 Pro",          # 6.1" display
+  "iPad Pro 13-inch (M4)"   # 13" iPad display (App Store required)
 ])
+
+# Disable concurrent simulators (prevents multiple windows)
+concurrent_simulators(false)
 
 # Supported languages
 languages([
@@ -44,8 +48,13 @@ languages([
   "ja"
 ])
 
-# Scheme name (must be your UI Test scheme)
-scheme("YourAppUITests")
+# Scheme name (IMPORTANT: use main app scheme, NOT UITests target)
+scheme("YourApp")  # Use main app scheme, not "YourAppUITests"
+
+# Only run screenshot tests (skip performance tests)
+only_testing([
+  "YourAppUITests/YourAppUITests/testTakeScreenshots"
+])
 
 # Output directory
 output_directory("./screenshots")
@@ -53,14 +62,56 @@ output_directory("./screenshots")
 # Clear previous screenshots
 clear_previous_screenshots(true)
 
+# Override status bar (9:41, full battery, full signal)
+override_status_bar(true)
+
 # Stop after first error
 stop_after_first_error(false)
 
 # Reinstall app for each language
 reinstall_app(true)
 
-# Erase simulator before running
-erase_simulator(true)
+# Launch arguments for screenshot mode
+launch_arguments(["-UITesting", "-ScreenshotMode"])
+
+# Disable parallel testing (prevents simulator clones)
+xcargs("-parallel-testing-enabled NO")
+```
+
+### Configuration Tips
+
+**Device Selection**:
+- Use latest iOS simulators for best compatibility
+- Include both iPhone and iPad for App Store requirements
+- Update device names when new iOS versions release
+
+**Scheme Name**:
+⚠️ **Critical**: Use your **main app scheme** (e.g., `YourApp`), **NOT** the UITests target name (e.g., `YourAppUITests`). This is a common mistake!
+
+**Preventing Simulator Issues**:
+- `concurrent_simulators(false)`: Prevents multiple simulator windows
+- `xcargs("-parallel-testing-enabled NO")`: Avoids creating simulator clones
+
+**Selective Test Running**:
+Use `only_testing` to run specific tests:
+```ruby
+only_testing([
+  "YourAppUITests/YourAppUITests/testTakeScreenshots"
+])
+```
+Format: `[Target]/[Class]/[Method]`
+
+**Launch Arguments**:
+Pass flags to detect screenshot mode in your app:
+```ruby
+launch_arguments(["-UITesting", "-ScreenshotMode"])
+```
+
+In your app code:
+```swift
+if CommandLine.arguments.contains("-UITesting") {
+    // Skip onboarding, disable analytics, etc.
+}
 ```
 
 ## Writing UI Tests
@@ -72,37 +123,68 @@ In your UI test file (e.g., `YourAppUITests.swift`):
 ```swift
 import XCTest
 
-class YourAppUITests: XCTestCase {
+final class YourAppUITests: XCTestCase {
 
+    var app: XCUIApplication!
+
+    @MainActor
     override func setUpWithError() throws {
         continueAfterFailure = false
 
-        let app = XCUIApplication()
+        // Explicitly specify bundle identifier (avoids launching wrong app)
+        app = XCUIApplication(bundleIdentifier: "com.yourcompany.yourapp")
         setupSnapshot(app)
         app.launch()
+
+        // Wait for app to fully load
+        Thread.sleep(forTimeInterval: 2)
     }
 
-    func testTakeScreenshots() throws {
-        let app = XCUIApplication()
+    override func tearDownWithError() throws {
+        app = nil
+    }
 
+    @MainActor
+    func testTakeScreenshots() throws {
         // Screenshot 1: Main screen
+        let startButton = app.buttons["start_button"]
+        XCTAssertTrue(startButton.waitForExistence(timeout: 5))
+
+        Thread.sleep(forTimeInterval: 1)  // Wait for animations
         snapshot("01_MainScreen")
 
         // Screenshot 2: Navigate and capture
-        app.buttons["Features"].tap()
+        app.buttons["features_button"].tap()
+        Thread.sleep(forTimeInterval: 1)
         snapshot("02_Features")
 
-        // Screenshot 3: Open a modal
-        app.buttons["Settings"].tap()
+        // Screenshot 3: Settings screen
+        app.buttons["settings_button"].tap()
+        Thread.sleep(forTimeInterval: 1)
         snapshot("03_Settings")
-
-        // Screenshot 4: Fill a form
-        let textField = app.textFields["Search"]
-        textField.tap()
-        textField.typeText("Example")
-        snapshot("04_Search")
     }
 }
+```
+
+### Modern Best Practices (Swift 6+)
+
+**Use `@MainActor`**: Required for UI operations in Swift 6+
+```swift
+@MainActor
+override func setUpWithError() throws { ... }
+
+@MainActor
+func testTakeScreenshots() throws { ... }
+```
+
+**Specify Bundle Identifier**: Prevents launching wrong app
+```swift
+app = XCUIApplication(bundleIdentifier: "com.yourcompany.yourapp")
+```
+
+**Use Instance Variable**: Store app reference
+```swift
+var app: XCUIApplication!
 ```
 
 ### Key Functions
@@ -186,10 +268,27 @@ button.accessibilityIdentifier = "settings_button"
 
 ## Running Snapshot
 
+### Before Running
+
+**Shutdown all simulators to prevent clone issues**:
+```bash
+xcrun simctl shutdown all
+```
+
+Or configure in Fastfile:
+```ruby
+lane :screenshots do
+  sh("xcrun simctl shutdown all")
+  snapshot
+end
+```
+
 ### Generate All Screenshots
 
 ```bash
 fastlane snapshot
+# or
+fastlane ios screenshots
 ```
 
 ### Generate for Specific Device
@@ -244,50 +343,74 @@ Ensure your app window is sized appropriately before taking screenshots.
 
 ## Troubleshooting
 
-### "Build failed" Error
+**For complete troubleshooting guide, see `troubleshooting-ios.md`.**
 
-Ensure your UI Test target builds successfully:
+### Common Quick Fixes
 
-```bash
-xcodebuild -scheme YourAppUITests -destination 'platform=iOS Simulator,name=iPhone 15 Pro' build-for-testing
+**Scheme not found**
+```ruby
+# Use main app scheme, not UITests target
+scheme("YourApp")  # ✅ Correct
+# scheme("YourAppUITests")  # ❌ Wrong
 ```
 
-### Simulator Not Found
+**Simulator clones being created**
+```ruby
+concurrent_simulators(false)
+xcargs("-parallel-testing-enabled NO")
+```
+
+**Shutdown all simulators before running**
+```bash
+xcrun simctl shutdown all
+fastlane ios screenshots
+```
+
+**SnapshotHelper.swift missing**
+
+Add `SnapshotHelper.swift` to your UITests target in Xcode manually.
+
+**Build failed**
+
+Ensure UITest target builds:
+```bash
+xcodebuild -scheme YourApp -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max' build-for-testing
+```
+
+**Simulator not found**
 
 List available simulators:
-
 ```bash
 xcrun simctl list devices
 ```
 
-Update Snapfile with exact device names from the list.
+Update Snapfile with exact device names.
 
-### Screenshots Incomplete
+**Screenshots incomplete**
 
 Add waits before snapshots:
-
 ```swift
-sleep(2)  // Simple wait
-snapshot("screen")
-
-// Or better: wait for specific element
 app.buttons["Ready"].waitForExistence(timeout: 5)
+Thread.sleep(forTimeInterval: 1)
 snapshot("screen")
 ```
 
-### Permission Dialogs Blocking
+**Permission dialogs blocking**
 
-Handle interruptions explicitly:
-
+Handle interruptions:
 ```swift
-addUIInterruptionMonitor(withDescription: "Location Dialog") { alert in
-    alert.buttons["Allow While Using App"].tap()
-    return true
+addUIInterruptionMonitor(withDescription: "System Dialog") { alert in
+    if alert.buttons["Allow"].exists {
+        alert.buttons["Allow"].tap()
+        return true
+    }
+    return false
 }
-
-// Trigger the monitor
-app.tap()
+app.launch()
+app.tap()  // Trigger the monitor
 ```
+
+**See `troubleshooting-ios.md` for complete solutions.**
 
 ## Integration with Frameit
 

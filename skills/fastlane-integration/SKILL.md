@@ -11,8 +11,16 @@ Comprehensive guide for integrating fastlane into your project to automate app s
 
 **What type of project are you working with?**
 
-**Native iOS/macOS app** → Use fastlane snapshot for screenshots + deliver for uploads
-- See references/ios-snapshot.md for snapshot setup
+**Native iOS app** → Use fastlane snapshot + deliver for complete App Store workflow
+- **See references/ios-native.md for complete integration guide** ⭐
+- Includes: API Key setup, screenshots, metadata, TestFlight
+- Uses XCUITest for automated screenshots
+- See references/ios-snapshot.md for snapshot-specific details
+- See references/api-key-setup.md for authentication setup
+- See references/troubleshooting-ios.md for common issues
+
+**Native macOS app** → Use fastlane snapshot for screenshots + deliver for uploads
+- See references/ios-snapshot.md for snapshot setup (macOS section)
 - Fastlane natively supports XCUITest-based screenshots
 
 **Electron macOS app** → Use Playwright + custom frameit for screenshots + deliver for uploads
@@ -30,7 +38,63 @@ Comprehensive guide for integrating fastlane into your project to automate app s
 - Create UI tests in Espresso
 - Use screengrab for automated screenshots
 
-## Quick Start
+## Quick Start for iOS Native Apps
+
+**For complete iOS setup, see `references/ios-native.md`.**
+
+### 1. Install fastlane
+```bash
+gem install fastlane
+```
+
+### 2. Initialize fastlane in your project
+```bash
+cd YourProject
+fastlane init
+```
+
+### 3. Set up App Store Connect API Key
+Create API Key in App Store Connect, then create `fastlane/.env`:
+```bash
+APP_STORE_CONNECT_KEY_ID=YOUR_KEY_ID
+APP_STORE_CONNECT_ISSUER_ID=YOUR_ISSUER_ID
+APP_STORE_CONNECT_TEAM_ID=YOUR_TEAM_ID
+APP_STORE_CONNECT_API_KEY_PATH=./fastlane/AuthKey_YOUR_KEY_ID.p8
+```
+
+See `references/api-key-setup.md` for detailed setup.
+
+### 4. Configure Snapfile for screenshots
+```bash
+cd fastlane
+fastlane snapshot init
+```
+
+Edit `Snapfile` with your devices and languages. See example configuration in `references/ios-native.md`.
+
+### 5. Create UI Tests for screenshots
+Add accessibility identifiers to your views, write UITests. See `references/ios-native.md` for complete example.
+
+### 6. Generate screenshots
+```bash
+fastlane ios screenshots
+```
+
+### 7. Upload to App Store Connect
+```bash
+# Upload screenshots
+fastlane ios upload_screenshots
+
+# Upload metadata
+fastlane ios upload_metadata
+
+# Upload both
+fastlane ios upload
+```
+
+---
+
+## Quick Start for Other Platforms
 
 ### 1. Install Dependencies
 
@@ -449,9 +513,22 @@ Ensure your Playwright script captures at the correct resolution.
 
 ## Resources
 
-- **References**: See references/ folder for detailed guides
-- **Templates**: See assets/templates/ for Fastfile, Appfile, etc.
-- **Scripts**: See scripts/ folder for automation scripts
+### Reference Guides
+
+**iOS Native Apps**:
+- `references/ios-native.md` - Complete iOS integration guide (API Key, screenshots, metadata, TestFlight)
+- `references/api-key-setup.md` - App Store Connect API Key configuration
+- `references/ios-snapshot.md` - Snapshot-specific configuration and best practices
+- `references/troubleshooting-ios.md` - Common iOS issues and solutions
+
+**Other Platforms**:
+- `references/macos-electron.md` - Electron macOS apps
+- `references/frameit-config.md` - Screenshot beautification
+- `references/metadata-structure.md` - App Store metadata reference
+
+**Scripts & Templates**:
+- `scripts/` - Automation scripts
+- `assets/templates/` - Fastfile, Appfile templates
 
 ## Next Steps
 
