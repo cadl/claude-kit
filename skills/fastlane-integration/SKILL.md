@@ -72,6 +72,8 @@ fastlane snapshot init
 
 Edit `Snapfile` with your devices and languages. See example configuration in `references/ios-native.md`.
 
+**⚠️ `launch_arguments` pitfall**: Each element in the array is a separate "argument set". Snapshot runs the full device × language matrix for **each set**. Use a single string for all arguments: `launch_arguments(["-flag1 -flag2 value"])`. Multiple elements are only for A/B testing different configurations. See `references/ios-snapshot.md` for details.
+
 ### 5. Create UI Tests for screenshots
 Add accessibility identifiers to your views, write UITests. See `references/ios-native.md` for complete example.
 

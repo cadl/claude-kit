@@ -417,10 +417,7 @@ app.tap()  // Triggers interrupt monitors
 Use launch arguments to skip permission dialogs:
 ```ruby
 # In Snapfile
-launch_arguments([
-  "-UITesting",
-  "-SkipPermissions"
-])
+launch_arguments(["-UITesting -SkipPermissions"])
 ```
 
 Then in your app:
@@ -555,6 +552,88 @@ sips -g pixelWidth -g pixelHeight screenshots/en-US/*.png
 **Required iPad sizes**:
 - 12.9" iPad Pro: 2048 x 2732
 - 11" iPad Pro: 1668 x 2388
+
+---
+
+## Issue 16: Duplicate Screenshots / 2x-4x Longer Runs
+
+### Symptoms
+- Snapshot runs take 2x–4x longer than expected
+- Logs show the same files being copied multiple times per language
+- Output shows repeated `FASTLANE_LANGUAGE=en-US` cycles before moving to next language
+- Example: With 2 languages, you see 4 xcodebuild cycles instead of 2
+
+### Root Cause
+
+The `launch_arguments` parameter uses **array of argument sets** semantics, not array of arguments. Each element in the array is treated as a separate configuration. Snapshot generates screenshots for:
+
+**Argument sets × Devices × Languages**
+
+### Example of the Problem
+
+```ruby
+# ❌ Wrong: Creates 2 argument sets
+launch_arguments(["-MOCK_HEALTHKIT", "true"])
+
+# With 2 devices and 2 languages:
+# 2 arg sets × 2 devices × 2 languages = 8 total runs
+# But the 2nd set (just "true") overwrites the first!
+```
+
+You'll see in logs:
+```
+Copying 'iPhone 16 Pro Max-01_Overview.png'...  # First run (arg set 1)
+Copying 'iPhone 16 Pro Max-01_Overview.png'...  # Second run (arg set 2) - overwriting!
+```
+
+### Solution
+
+Combine all arguments into a **single string**:
+
+```ruby
+# ✅ Correct: 1 argument set
+launch_arguments(["-MOCK_HEALTHKIT true"])
+
+# With 2 devices and 2 languages:
+# 1 arg set × 2 devices × 2 languages = 4 runs ✅
+```
+
+### Intentional Multi-Set Usage (A/B Testing)
+
+Multiple elements are only useful for comparing different configurations:
+
+```ruby
+# Correct use case: Generate screenshots with different feature states
+launch_arguments([
+  "-FeatureXEnabled YES",
+  "-FeatureXEnabled NO"
+])
+# This intentionally generates 2 complete sets for comparison
+```
+
+### How to Diagnose
+
+**Count xcodebuild invocations** in the log:
+
+```bash
+# After running snapshot, check the log
+grep "Running snapshot on:" ~/Library/Logs/snapshot/*.log | wc -l
+
+# Expected: number_of_languages
+# If you see 2x or 4x that number, check launch_arguments
+```
+
+**Check for duplicate "Copying" messages**:
+
+```bash
+grep "Copying.*\.png" ~/Library/Logs/snapshot/*.log | sort | uniq -c | sort -rn | head -20
+```
+
+If you see counts > 1, screenshots are being overwritten.
+
+### Related
+
+See `references/ios-snapshot.md` for detailed explanation of `launch_arguments` array semantics.
 
 ---
 

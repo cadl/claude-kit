@@ -72,7 +72,7 @@ stop_after_first_error(false)
 reinstall_app(true)
 
 # Launch arguments for screenshot mode
-launch_arguments(["-UITesting", "-ScreenshotMode"])
+launch_arguments(["-UITesting -ScreenshotMode"])
 
 # Disable parallel testing (prevents simulator clones)
 xcargs("-parallel-testing-enabled NO")
@@ -104,7 +104,11 @@ Format: `[Target]/[Class]/[Method]`
 **Launch Arguments**:
 Pass flags to detect screenshot mode in your app:
 ```ruby
-launch_arguments(["-UITesting", "-ScreenshotMode"])
+# ✅ Correct: Single string with multiple arguments
+launch_arguments(["-UITesting -ScreenshotMode"])
+
+# ❌ Wrong: Multiple elements create duplicate runs (see pitfall below)
+# launch_arguments(["-UITesting", "-ScreenshotMode"])
 ```
 
 In your app code:
@@ -113,6 +117,72 @@ if CommandLine.arguments.contains("-UITesting") {
     // Skip onboarding, disable analytics, etc.
 }
 ```
+
+### ⚠️ Common Pitfall: Duplicate Screenshot Runs
+
+**Problem**: Snapshot runs take 2x–4x longer than expected, and you see the same screenshots being copied multiple times in the logs.
+
+**Root Cause**: The `launch_arguments` parameter is an **array of argument sets**, not an array of arguments. Fastlane snapshot is designed for A/B testing—it generates screenshots for **every combination** of:
+- Argument sets × Devices × Languages
+
+**Example**:
+```ruby
+# ❌ This creates 2 argument sets
+launch_arguments(["-MockData", "true"])
+
+# With 2 devices and 2 languages:
+# 2 arg sets × 2 devices × 2 languages = 8 screenshot runs
+# But the 2nd argument set (just "true") is meaningless!
+```
+
+**Correct Pattern** — All arguments for one configuration in a single string:
+```ruby
+# ✅ Correct: 1 argument set
+launch_arguments(["-MockData true -SkipOnboarding"])
+
+# With 2 devices and 2 languages:
+# 1 arg set × 2 devices × 2 languages = 4 screenshot runs ✅
+```
+
+**How to Identify This Problem**:
+- Logs show repeated cycles: `FASTLANE_LANGUAGE=en-US` appears multiple times before moving to the next language
+- Screenshots are "Copying" twice per language
+- Total runtime is 2x–4x what you expect
+
+**Intentional Multi-Set Usage** (A/B Testing):
+Multiple elements are only useful when you want to compare different configurations:
+```ruby
+# Correct use case: Generate 2 sets of screenshots with different feature flags
+launch_arguments([
+  "-FeatureXEnabled YES",    # First configuration
+  "-FeatureXEnabled NO"      # Second configuration
+])
+# Result: 2 complete sets of screenshots for comparison
+```
+
+### Dedicated Snapshot Scheme (Best Practice)
+
+Create a dedicated Xcode scheme (e.g., `YourAppSnapshot`) specifically for screenshot generation to avoid running unit tests during the process.
+
+**Why**: Using the main app scheme (e.g., `YourApp`) includes all test targets by default, including unit tests. This wastes build time since snapshot only needs UI tests.
+
+**Setup**:
+1. In Xcode: Product → Scheme → Manage Schemes
+2. Duplicate your main scheme (e.g., `YourApp` → `YourAppSnapshot`)
+3. Edit the new scheme → Test section
+4. Uncheck all targets **except** your UI test target (e.g., `YourAppUITests`)
+5. Save and mark as Shared (so it's committed to git)
+
+**In Snapfile**:
+```ruby
+scheme("YourAppSnapshot")  # ✅ Dedicated snapshot scheme
+# scheme("YourApp")        # ❌ Runs unnecessary unit tests
+```
+
+**Benefits**:
+- Faster builds (skips unit test compilation)
+- Cleaner logs (no unit test output)
+- Prevents test conflicts (some unit tests may fail in simulator environment)
 
 ## Writing UI Tests
 
@@ -246,7 +316,7 @@ Snapshot automatically runs your test for each language in the `Snapfile`.
 Instead of hardcoded text:
 
 ```swift
-// ❌ Bad: Hardcoded text
+// ❌ Bad: Hardcoded text (breaks in other languages)
 app.buttons["Settings"].tap()
 
 // ✅ Good: Use accessibility identifiers
@@ -265,6 +335,23 @@ Button("Settings") {
 // In UIKit
 button.accessibilityIdentifier = "settings_button"
 ```
+
+### Index-Based Navigation for Tabs
+
+For tab bar navigation, use **index-based selection** instead of label-based:
+
+```swift
+// ❌ Bad: Label-based (breaks when language changes)
+app.tabBars.buttons["Overview"].tap()
+app.tabBars.buttons["训练记录"].tap()  // Different in each language!
+
+// ✅ Good: Index-based (works across all languages)
+app.tabBars.buttons.element(boundBy: 0).tap()  // First tab
+app.tabBars.buttons.element(boundBy: 1).tap()  // Second tab
+app.tabBars.buttons.element(boundBy: 2).tap()  // Third tab
+```
+
+**Why**: Tab labels change with each language, but tab order stays the same. Index-based navigation is locale-independent.
 
 ## Running Snapshot
 

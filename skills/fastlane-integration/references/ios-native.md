@@ -189,7 +189,7 @@ stop_after_first_error(false)
 reinstall_app(true)
 
 # Launch arguments for screenshot mode
-launch_arguments(["-UITesting", "-ScreenshotMode"])
+launch_arguments(["-UITesting -ScreenshotMode"])
 
 # Disable parallel testing (avoids simulator clones)
 xcargs("-parallel-testing-enabled NO")
